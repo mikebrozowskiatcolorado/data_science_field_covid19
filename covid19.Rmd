@@ -2,7 +2,6 @@
 title: "Covid19"
 author: "Mike Brozowski"
 date: "2024-06-08"
-output: pdf_document
 output:
   pdf_document: default
   html_document: default
@@ -50,6 +49,8 @@ tidy_deaths_global = raw_deaths_global %>%
 
 # Visual 1: Deaths Overall - Top 30 US States Or Countries
 
+The chart below shows the top 30 US States or Countries with the highest death count. With the United States included, it would be the highest. Breaking down the data in smaller subsets, such as states, may bring some insight into how each government or population handled the pandemic. In the effort of fairness, if the data was included, other countries should be broken down into similar groups: Canada into provinces, India into states, etc. to best represent a population.
+
 ```{r visual_1}
 
 # total deaths per state
@@ -76,6 +77,8 @@ ggplot(top_total_deaths_per_location) +
 ```
 
 # Visual 2: Death Rate Overall - Top 30 US States or Countries
+
+This chart takes the rate of death into account, comparing the death total to the confirmed case total to find a death or recovery rate. The chart below shows the top 30 highest death rates. The highest population on the chart isn't even a country, but rather a cruise ship. It isn't the only cruise ship to show up on this chart, the Grand Princess is another one with a high death rate. With the close proximity from person to person and lack of hospital medical staff, it can be inferred that is the reason for such a high death rate. Although the United States was excluded from the country-list in favor of showing states, no US state shows up on this list.
 
 ```{r visual_2}
 
@@ -123,7 +126,9 @@ ggplot(top_total_per_location) +
 
 ```
 
-# Model 1: Correlation Between County Population and Recovery Rate
+# Model 1: Correlation Between County Population and Death Rate
+
+The plot below shows all United States counties by population (y-axis) and death rate (x-axis) in order to see if there was a correlation between population and death rate. The red vertical line is the mean of all death rates and the black vertical line is the median of all death rates. Since the median and mean are very close, no strong correlation one way or another is justified. Strangely, there is a *slight* lean towards the lower population counties to have a higher death rate.
 
 ```{r model_1}
 

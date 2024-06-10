@@ -1,0 +1,161 @@
+---
+title: "Covid19"
+author: "Mike Brozowski"
+date: "2024-06-08"
+output: pdf_document
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+url_base = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
+url_1 = "time_series_covid19_confirmed_US.csv"
+url_2 = "time_series_covid19_confirmed_global.csv"
+url_3 = "time_series_covid19_deaths_US.csv"
+url_4 = "time_series_covid19_deaths_global.csv"
+raw_confirmed_us = read_csv(str_c(url_base, url_1))
+raw_confirmed_global = read_csv(str_c(url_base, url_2))
+raw_deaths_us = read_csv(str_c(url_base, url_3))
+raw_deaths_global = read_csv(str_c(url_base, url_4))
+```
+
+```{r tidy}
+tidy_confirmed_us = raw_confirmed_us %>%
+  pivot_longer(cols=names(raw_confirmed_us)[12:length(raw_confirmed_us)],
+               names_to="Date",
+               values_to="Confirmed") %>%
+  select(c(Admin2,Province_State,Date,Confirmed)) %>%
+  rename(County = Admin2, State = Province_State)
+tidy_deaths_us = raw_deaths_us %>%
+  pivot_longer(cols=names(raw_deaths_us)[13:length(raw_deaths_us)],
+               names_to="Date",
+               values_to="Deaths") %>%
+  select(c(Admin2,Province_State,Population,Date,Deaths)) %>%
+  rename(County = Admin2, State = Province_State)
+tidy_confirmed_global = raw_confirmed_global %>%
+  pivot_longer(cols=-c("Province/State","Country/Region",Lat,Long),
+               names_to="Date",
+               values_to="Confirmed") %>%
+  select(-c(Lat,Long))
+tidy_deaths_global = raw_deaths_global %>%
+  pivot_longer(cols=-c("Province/State","Country/Region",Lat,Long),
+               names_to="Date",
+               values_to="Deaths") %>%
+  select(-c(Lat,Long))
+```
+
+# Visual 1: Deaths Overall - Top 30 US States Or Countries
+
+```{r visual_1}
+
+# total deaths per state
+total_deaths_per_state = tidy_deaths_us %>%
+  group_by(State) %>%
+  summarize(Total=sum(Deaths)) %>%
+  rename(Location=State)
+# total deaths per country (except US)
+total_deaths_per_country = tidy_deaths_global %>%
+  group_by(`Country/Region`) %>%
+  filter(`Country/Region` != "US") %>%
+  summarize(Total=sum(Deaths)) %>%
+  rename(Location=`Country/Region`)
+# union
+total_deaths_per_location = union(total_deaths_per_state, total_deaths_per_country)
+# get top 30
+top_total_deaths_per_location = total_deaths_per_location %>%
+  arrange(-Total) %>%
+  top_n(30,Total)
+# y axis deaths, x axis location
+ggplot(top_total_deaths_per_location) +
+  geom_col(aes(x=Total,y=reorder(Location,Total)))
+
+```
+
+# Visual 2: Death Rate Overall - Top 30 US States or Countries
+
+```{r visual_2}
+
+# total confirmed per state
+total_confirmed_per_state = tidy_confirmed_us %>%
+  group_by(State) %>%
+  summarize(Confirmed=sum(Confirmed)) %>%
+  rename(Location=State)
+# total deaths per state
+total_deaths_per_state = tidy_deaths_us %>%
+  group_by(State) %>%
+  summarize(Deaths=sum(Deaths)) %>%
+  rename(Location=State)
+# join - death rate per state
+state_join = full_join(total_confirmed_per_state, total_deaths_per_state)
+# total confirmed per country (except US)
+total_confirmed_per_country = tidy_confirmed_global %>%
+  group_by(`Country/Region`) %>%
+  filter(`Country/Region` != "US") %>%
+  summarize(Confirmed=sum(Confirmed)) %>%
+  rename(Location=`Country/Region`)
+# total deaths per country (except US)
+total_deaths_per_country = tidy_deaths_global %>%
+  group_by(`Country/Region`) %>%
+  filter(`Country/Region` != "US") %>%
+  summarize(Deaths=sum(Deaths)) %>%
+  rename(Location=`Country/Region`)
+# join - death rate per country (except US)
+country_join = full_join(total_confirmed_per_country, total_deaths_per_country)
+# union
+total_join = union(state_join, country_join) %>%
+  group_by(Location,Confirmed,Deaths) %>%
+  filter(Confirmed>0) %>%
+  reframe(Rate=(Deaths/Confirmed)) %>%
+  select(c(Location,Rate,Confirmed,Deaths))
+# get top 30
+top_total_per_location = total_join %>%
+  arrange(Rate) %>%
+  filter(Location != "Korea, North") %>%
+  ungroup() %>%
+  top_n(30,Rate)
+# y axis death rate, x axis location
+ggplot(top_total_per_location) +
+  geom_col(aes(x=Rate,y=reorder(Location,Rate)))
+
+```
+
+# Model 1: Correlation Between County Population and Recovery Rate
+
+```{r model_1}
+
+# total confirmed per county
+total_confirmed_per_county = tidy_confirmed_us %>%
+  group_by(State,County) %>%
+  summarize(Confirmed=sum(Confirmed)) %>%
+  rename(Location=County)
+# total deaths per county
+total_deaths_per_county = tidy_deaths_us %>%
+  group_by(State,County) %>%
+  summarize(Deaths=sum(Deaths),Population=mean(Population)) %>%
+  rename(Location=County) %>%
+  select(c(Location,Deaths,Population))
+# join - death rate per county
+county_join = full_join(total_confirmed_per_county, total_deaths_per_county) %>%
+  group_by(State,Location,Confirmed,Deaths,Population) %>%
+  reframe(Rate=(Deaths/Confirmed)) %>%
+  filter(Location != "Unassigned") %>%
+  filter(Rate != Inf) %>%
+  select(c(Location,Rate,Confirmed,Deaths,Population))
+# y axis death rate, x axis population
+ggplot(county_join, aes(x=Rate,y=Population)) + 
+  geom_point() +
+  geom_vline(aes(xintercept=mean(county_join$Rate),color="red")) +
+  geom_vline(aes(xintercept=median(county_join$Rate)))
+# model line for correlation between the two
+model = lm(Population ~ Rate, data = county_join)
+summary(model)
+
+```
+
+```{r footer}
+sessionInfo()
+```
